@@ -6,10 +6,10 @@
   "framework": "nextjs",
   "regions": ["hkg1"],
   "env": {
-    "NEXT_PUBLIC_YOUTUBE_CLIENT_ID": "@youtube-client-id",
-    "YOUTUBE_CLIENT_SECRET": "@youtube-client-secret",
-    "NEXT_PUBLIC_TIKTOK_CLIENT_KEY": "@tiktok-client-key",
-    "TIKTOK_CLIENT_SECRET": "@tiktok-client-secret",
-    "NEXT_PUBLIC_APP_URL": "@app-url"
+    "NEXT_PUBLIC_YOUTUBE_CLIENT_ID": "",
+    "YOUTUBE_CLIENT_SECRET": "",
+    "NEXT_PUBLIC_TIKTOK_CLIENT_KEY": "",
+    "TIKTOK_CLIENT_SECRET": "",
+    "NEXT_PUBLIC_APP_URL": ""
   }
 }

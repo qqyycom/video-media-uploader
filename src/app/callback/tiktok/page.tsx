@@ -8,7 +8,7 @@ import { TikTokAccount } from "@/app/types";
 export default async function TikTokCallbackPage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   // 从参数中获取code
   const { code, state } = await searchParams;
