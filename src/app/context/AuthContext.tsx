@@ -108,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const youtubeStr = localStorage.getItem("youtube_account");
       if (youtubeStr) {
         const youtubeAccount: YouTubeAccount = JSON.parse(youtubeStr);
+        document.cookie = `youtube_account=${JSON.stringify(youtubeAccount)}`;
         dispatch({ type: "SET_YOUTUBE_ACCOUNT", payload: youtubeAccount });
       } else {
         dispatch({ type: "SET_YOUTUBE_ACCOUNT", payload: null });
@@ -117,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const tiktokStr = localStorage.getItem("tiktok_account");
       if (tiktokStr) {
         const tiktokAccount: TikTokAccount = JSON.parse(tiktokStr);
+        document.cookie = `tiktok_account=${JSON.stringify(tiktokAccount)}`;
         dispatch({ type: "SET_TIKTOK_ACCOUNT", payload: tiktokAccount });
       } else {
         dispatch({ type: "SET_TIKTOK_ACCOUNT", payload: null });
@@ -226,8 +228,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshToken = async (platform: "youtube" | "tiktok") => {
     try {
       console.log(`🔄 Refreshing ${platform} token...`);
-      
-      const currentAccount = platform === "youtube" ? state.youtubeAccount : state.tiktokAccount;
+
+      const currentAccount =
+        platform === "youtube" ? state.youtubeAccount : state.tiktokAccount;
       if (!currentAccount || !currentAccount.refreshToken) {
         throw new Error(`No refresh token available for ${platform}`);
       }
@@ -236,27 +239,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          refreshToken: currentAccount.refreshToken
+          refreshToken: currentAccount.refreshToken,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to refresh ${platform} token`);
+        throw new Error(
+          errorData.error || `Failed to refresh ${platform} token`
+        );
       }
 
       const data = await response.json();
-      
+
       // Update the account with new token information
       const updatedAccount = {
         ...currentAccount,
         accessToken: data.accessToken,
         refreshToken: data.refreshToken || currentAccount.refreshToken,
-        expiresAt: data.expiresAt || (Date.now() + (data.expiresIn * 1000))
+        expiresAt: data.expiresAt || Date.now() + data.expiresIn * 1000,
       };
 
       // Save to localStorage
-      localStorage.setItem(`${platform}_account`, JSON.stringify(updatedAccount));
+      localStorage.setItem(
+        `${platform}_account`,
+        JSON.stringify(updatedAccount)
+      );
 
       // Update state
       if (platform === "youtube") {
@@ -267,14 +275,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log(`✅ ${platform} token refreshed successfully`);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : `Failed to refresh ${platform} token`;
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : `Failed to refresh ${platform} token`;
       console.error(`❌ Token refresh failed for ${platform}:`, errorMessage);
-      
+
       dispatch({
         type: "SET_ERROR",
         payload: errorMessage,
       });
-      
+
       throw error;
     }
   };

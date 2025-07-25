@@ -23,7 +23,7 @@ export default async function YoutubeCallbackPage({
   }
 
   try {
-    // 使用code获取access_token 调用/api/tiktok/auth 接口
+    // 使用code获取access_token 调用/api/Youtube/auth 接口
     const response = await fetch(
       `${process.env.NEXT_PUBLIC_APP_URL}/api/youtube/auth?code=${code}&state=${state}`,
       { redirect: "manual" }
@@ -44,7 +44,7 @@ export default async function YoutubeCallbackPage({
     // 如果没有重定向也没有JSON数据，显示成功信息
     return (
       <div>
-        <h1>TikTok 授权成功</h1>
+        <h1>Youtube 授权成功</h1>
         <p>您已成功授权，正在返回首页...</p>
         {/* 使用 client组件将用户绑定信息存到localstorage中 */}
         <AuthClient youtubeAccount={data.account as YouTubeAccount} />
@@ -55,7 +55,7 @@ export default async function YoutubeCallbackPage({
       throw error;
     }
 
-    console.error("TikTok 授权错误:", error);
+    console.error("Youtube 授权错误:", error);
 
     return (
       <div>

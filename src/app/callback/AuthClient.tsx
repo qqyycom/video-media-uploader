@@ -15,9 +15,23 @@ export default function AuthClient({
   useEffect(() => {
     if (tiktokAccount) {
       localStorage.setItem("tiktok_account", JSON.stringify(tiktokAccount));
+      // 将tiktok_account写入cookie
+      // document.cookie = `tiktok_account=${JSON.stringify(tiktokAccount)}`;
+      document.cookie = `tiktok_account=${JSON.stringify(
+        tiktokAccount
+      )}; path=/; max-age=${60 * 60 * 24 * 7}; secure=${
+        process.env.NODE_ENV === "production"
+      }; samesite=lax`;
     }
     if (youtubeAccount) {
       localStorage.setItem("youtube_account", JSON.stringify(youtubeAccount));
+      // 将youtube_account写入cookie
+      // document.cookie = `youtube_account=${JSON.stringify(youtubeAccount)}`;
+      document.cookie = `youtube_account=${JSON.stringify(
+        youtubeAccount
+      )}; path=/; max-age=${60 * 60 * 24 * 7}; secure=${
+        process.env.NODE_ENV === "production"
+      }; samesite=lax`;
     }
 
     // 3秒后，重定向回首页

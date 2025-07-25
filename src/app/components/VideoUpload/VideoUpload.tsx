@@ -2,14 +2,14 @@
 
 import React, { useCallback, useState, useRef } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Upload, Video, X, File, Clock, CheckCircle } from 'lucide-react'
+import { Upload, Video, X, Youtube, Music } from 'lucide-react'
 import { VideoFile, UploadMetadata } from '@/app/types'
 import { formatFileSize, formatDuration, validateVideoFile } from '@/app/lib/utils'
 import { Button } from '@/app/components/common/Button'
-import { Input } from '@/app/components/common/Input'
-import { Textarea } from '@/app/components/common/Textarea'
-import { Select } from '@/app/components/common/Select'
-import { TagInput } from '@/app/components/common/TagInput'
+import { Tabs, TabItem, TabPanel } from '@/app/components/common/Tabs'
+import { YouTubeUploadForm } from './YouTubeUploadForm'
+import { TikTokUploadForm } from './TikTokUploadForm'
+import { useAuth } from '@/app/context/AuthContext'
 
 interface VideoUploadProps {
   onVideoSelect: (video: VideoFile | undefined) => void
@@ -29,7 +29,9 @@ export function VideoUpload({
   isUploading = false,
 }: VideoUploadProps) {
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [activeTab, setActiveTab] = useState<string>('youtube')
   const videoRef = useRef<HTMLVideoElement>(null)
+  const { youtubeAccount, tiktokAccount } = useAuth()
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -82,46 +84,15 @@ export function VideoUpload({
     disabled: isUploading,
   })
 
-  const handleMetadataChange = (field: keyof UploadMetadata, value: string | string[] | undefined) => {
-    const newMetadata = { ...metadata, [field]: value }
-    onMetadataChange(newMetadata)
-    
-    // Clear error when user starts typing
-    if (errors[field]) {
-      setErrors({ ...errors, [field]: '' })
-    }
-  }
-
-  const validateMetadata = () => {
-    const newErrors: Record<string, string> = {}
-
-    if (!metadata.title.trim()) {
-      newErrors.title = '标题不能为空'
-    }
-
-    if (metadata.title.length > 100) {
-      newErrors.title = '标题不能超过100个字符'
-    }
-
-    if (metadata.description && metadata.description.length > 5000) {
-      newErrors.description = '描述不能超过5000个字符'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleUpload = (platform: 'youtube' | 'tiktok') => {
-    if (validateMetadata()) {
-      onUpload(platform)
-    }
-  }
-
   const removeVideo = () => {
     if (selectedVideo?.preview) {
       URL.revokeObjectURL(selectedVideo.preview)
     }
     onVideoSelect(undefined)
+  }
+
+  const handleUpload = (platform: 'youtube' | 'tiktok') => {
+    onUpload(platform)
   }
 
   return (
@@ -181,106 +152,48 @@ export function VideoUpload({
             />
           </div>
 
-          <div className="grid gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                标题 *
-              </label>
-              <Input
-                value={metadata.title}
-                onChange={(e) => handleMetadataChange('title', e.target.value)}
-                placeholder="输入视频标题"
-                maxLength={100}
-                error={errors.title}
-                disabled={isUploading}
-              />
-            </div>
+          <Tabs activeTab={activeTab} onChange={setActiveTab}>
+            <TabItem 
+              value="youtube" 
+              label="YouTube" 
+              icon={<Youtube className="h-4 w-4" />}
+              disabled={isUploading}
+            />
+            <TabItem 
+              value="tiktok" 
+              label="TikTok" 
+              icon={<Music className="h-4 w-4" />}
+              disabled={isUploading}
+            />
+          </Tabs>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                描述
-              </label>
-              <Textarea
-                value={metadata.description || ''}
-                onChange={(e) => handleMetadataChange('description', e.target.value)}
-                placeholder="输入视频描述"
-                maxLength={5000}
-                rows={4}
-                error={errors.description}
-                disabled={isUploading}
-              />
-            </div>
+          <TabPanel value="youtube" activeTab={activeTab}>
+            <YouTubeUploadForm
+              selectedVideo={selectedVideo}
+              metadata={metadata}
+              onMetadataChange={onMetadataChange}
+              onUpload={() => handleUpload('youtube')}
+              isUploading={isUploading}
+              isConnected={!!youtubeAccount}
+            />
+          </TabPanel>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                标签
-              </label>
-              <TagInput
-                tags={metadata.tags || []}
-                onChange={(tags) => handleMetadataChange('tags', tags)}
-                placeholder="添加标签"
-                disabled={isUploading}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  隐私设置
-                </label>
-                <Select
-                  value={metadata.privacy}
-                  onChange={(e) => handleMetadataChange('privacy', e.target.value)}
-                  disabled={isUploading}
-                >
-                  <option value="public">公开</option>
-                  <option value="unlisted">不公开</option>
-                  <option value="private">私密</option>
-                </Select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  分类
-                </label>
-                <Select
-                  value={metadata.category || '22'}
-                  onChange={(e) => handleMetadataChange('category', e.target.value)}
-                  disabled={isUploading}
-                >
-                  <option value="22">People & Blogs</option>
-                  <option value="24">Entertainment</option>
-                  <option value="10">Music</option>
-                  <option value="20">Gaming</option>
-                  <option value="26">Howto & Style</option>
-                </Select>
-              </div>
-            </div>
-          </div>
+          <TabPanel value="tiktok" activeTab={activeTab}>
+            <TikTokUploadForm
+              selectedVideo={selectedVideo}
+              metadata={metadata}
+              onMetadataChange={onMetadataChange}
+              onUpload={() => handleUpload('tiktok')}
+              isUploading={isUploading}
+              isConnected={!!tiktokAccount}
+            />
+          </TabPanel>
         </div>
       )}
 
-      {selectedVideo && (
-        <div className="flex justify-end space-x-3">
-          <Button
-            variant="outline"
-            onClick={() => handleUpload('youtube')}
-            disabled={isUploading}
-            className="flex items-center space-x-2"
-          >
-            <Video className="h-4 w-4" />
-            <span>上传到 YouTube</span>
-          </Button>
-          
-          <Button
-            variant="outline"
-            onClick={() => handleUpload('tiktok')}
-            disabled={isUploading}
-            className="flex items-center space-x-2"
-          >
-            <Video className="h-4 w-4" />
-            <span>上传到 TikTok</span>
-          </Button>
+      {errors.file && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-700 text-sm">{errors.file}</p>
         </div>
       )}
     </div>
