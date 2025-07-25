@@ -3,6 +3,7 @@ import { VideoFile, UploadMetadata } from "@/app/types";
 interface YouTubeUploadConfig {
   videoFile: VideoFile;
   metadata: UploadMetadata;
+  accessToken: string;
   onProgress?: (progress: number) => void;
   onChunkUploaded?: (uploadedBytes: number) => void;
 }
@@ -14,50 +15,54 @@ interface YouTubeUploadResult {
 }
 
 export async function uploadToYouTube({
+  accessToken,
   videoFile,
   metadata,
   onProgress,
   onChunkUploaded,
 }: YouTubeUploadConfig): Promise<YouTubeUploadResult> {
   try {
-    // Step 1: Initialize upload via backend to protect client secret
-    const initResponse = await fetch("/api/youtube/upload-init", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        title: metadata.title,
-        description: metadata.description,
-        tags: metadata.tags,
-        privacy: metadata.privacy,
-        category: metadata.category,
-        videoFile: {
-          size: videoFile.file.size,
-          name: videoFile.file.name,
-          type: videoFile.file.type,
+    // Step 1: Create upload session directly with YouTube API
+    const sessionResponse = await fetch(
+      "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-Upload-Content-Length": videoFile.file.size.toString(),
+          "X-Upload-Content-Type": videoFile.file.type || "video/*",
         },
-      }),
-    });
+        body: JSON.stringify({
+          snippet: {
+            title: metadata.title,
+            description: metadata.description || "",
+            tags: metadata.tags || [],
+            categoryId: metadata.category || "22",
+          },
+          status: {
+            privacyStatus: metadata.privacy || "private",
+          },
+        }),
+      }
+    );
 
-    if (!initResponse.ok) {
-      const errorData = await initResponse.json();
+    if (!sessionResponse.ok) {
+      const errorData = await sessionResponse.json();
       throw new Error(
-        `Failed to initialize YouTube upload: ${
-          errorData.error || "Unknown error"
+        `Failed to create upload session: ${
+          errorData.error?.message || "Unknown error"
         }`
       );
     }
 
-    const initData = await initResponse.json();
-    if (!initData.success) {
-      throw new Error(initData.error || "Failed to initialize upload");
+    const uploadUrl = sessionResponse.headers.get("Location");
+    if (!uploadUrl) {
+      throw new Error("No upload URL received from YouTube");
     }
 
-    const { uploadUrl } = initData.data;
-
-    // Step 2: Upload video file via backend proxy (chunked upload)
-    const chunkSize = videoFile.file.size; // file size
+    // Step 2: Upload video file directly to YouTube in chunks
+    const chunkSize = 64 * 1024 * 1024; // 64MB chunks
     const totalChunks = Math.ceil(videoFile.file.size / chunkSize);
     let uploadedBytes = 0;
 
@@ -69,46 +74,34 @@ export async function uploadToYouTube({
       }
       const chunk = videoFile.file.slice(start, end);
 
-      const formData = new FormData();
-      formData.append("videoFile", chunk);
-      formData.append("uploadUrl", uploadUrl);
-      formData.append("chunkIndex", i.toString());
-      formData.append("totalChunks", totalChunks.toString());
-      formData.append("fileSize", videoFile.file.size.toString());
-
-      const response = await fetch("/api/youtube/upload-chunk", {
-        method: "POST",
-        body: formData,
+      const response = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": videoFile.file.type,
+          "Content-Length": chunk.size.toString(),
+          "Content-Range": `bytes ${start}-${end - 1}/${videoFile.file.size}`,
+        },
+        body: chunk,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          `Chunk upload failed: ${errorData.error || "Unknown error"}`
-        );
-      }
-
-      const result = await response.json();
-
-      if (result.status === "complete") {
-        uploadedBytes = videoFile.file.size;
-        onProgress?.(100);
-        onChunkUploaded?.(uploadedBytes);
-
-        // Step 3: Wait for processing completion via backend
-        const publishStatus = await checkPublishStatus();
-        if (!publishStatus.success) {
-          throw new Error(publishStatus.error || "Upload processing failed");
-        }
-
-        return {
-          success: true,
-          videoId: result.videoId || publishStatus.videoId,
-        };
-      } else {
+      if (response.status === 308) {
+        // Resume incomplete
         uploadedBytes = end;
         onProgress?.((uploadedBytes / videoFile.file.size) * 100);
         onChunkUploaded?.(uploadedBytes);
+      } else if (response.status === 200 || response.status === 201) {
+        // Upload complete
+        const data = await response.json();
+
+        return {
+          success: true,
+          videoId: data.id,
+        };
+      } else {
+        const errorData = await response.json();
+        throw new Error(
+          `Upload failed: ${errorData.error?.message || "Unknown error"}`
+        );
       }
     }
 
@@ -120,40 +113,4 @@ export async function uploadToYouTube({
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
-}
-
-async function checkPublishStatus(): Promise<{
-  success: boolean;
-  videoId?: string;
-  error?: string;
-}> {
-  const maxAttempts = 60; // 2 minutes max
-  let attempts = 0;
-
-  while (attempts < maxAttempts) {
-    const statusResponse = await fetch("/api/youtube/upload-status", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!statusResponse.ok) {
-      return { success: false, error: "Failed to check upload status" };
-    }
-
-    const statusData = await statusResponse.json();
-
-    if (statusData.status === "PUBLISH_COMPLETE") {
-      return { success: true, videoId: statusData.videoId };
-    } else if (statusData.status === "PUBLISH_FAILED") {
-      return { success: false, error: "Video processing failed on YouTube" };
-    } else {
-      // Still processing, wait and check again
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      attempts++;
-    }
-  }
-
-  return { success: false, error: "Upload processing timeout" };
 }

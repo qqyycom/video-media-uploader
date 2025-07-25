@@ -87,6 +87,7 @@ export function useDirectUpload({
 
         if (platform === "youtube") {
           result = await uploadToYouTube({
+            accessToken,
             videoFile,
             metadata,
             onProgress: (progress) => {
