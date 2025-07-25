@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "./context/AuthContext";
-import { useVideoUploads } from "./hooks/useVideoUploads";
+import { useDirectUpload } from "./hooks/useDirectUpload";
 import { useAccountConnections } from "./hooks/useAccountConnections";
 import { useTokenRefresh } from "./hooks/useTokenRefresh";
 import { VideoUpload } from "./components/VideoUpload/VideoUpload";
@@ -34,14 +34,24 @@ export default function Home() {
 
   const {
     uploads,
-    selectedVideo,
-    metadata,
-    setSelectedVideo,
-    setMetadata,
-    addUpload,
-    updateUpload,
+    isUploading,
+    uploadToPlatform,
     cancelUpload,
-  } = useVideoUploads();
+    retryUpload,
+    clearUploads,
+  } = useDirectUpload({
+    youtubeAccessToken: youtubeAccount?.accessToken,
+    tiktokAccessToken: tiktokAccount?.accessToken,
+  });
+
+  const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
+  const [metadata, setMetadata] = useState<UploadMetadata>({
+    title: '',
+    description: '',
+    tags: [],
+    privacy: 'private',
+    category: '22',
+  });
 
   const {
     login,
@@ -54,7 +64,6 @@ export default function Home() {
   // Initialize token refresh monitoring
   useTokenRefresh();
 
-  const [isUploading, setIsUploading] = useState(false);
 
   // Helper function to check token expiry status
   const getTokenStatus = (account: YouTubeAccount | TikTokAccount | null) => {
@@ -135,95 +144,7 @@ export default function Home() {
 
     if (!selectedVideo) return;
 
-    setIsUploading(true);
-    const uploadId = addUpload(platform, selectedVideo, metadata);
-
-    try {
-      updateUpload(uploadId, { status: "uploading", progress: 0 });
-
-      if (platform === "tiktok") {
-        // Handle TikTok upload with chunked upload process
-        const { uploadVideoToTikTok } = await import("./lib/tiktokUpload");
-
-        const result = await uploadVideoToTikTok(
-          selectedVideo.file,
-          metadata,
-          (progress) => {
-            updateUpload(uploadId, { progress });
-          }
-        );
-
-        if (result.success && result.data) {
-          updateUpload(uploadId, {
-            status: "completed",
-            progress: 100,
-            completedAt: new Date(),
-            videoId: result.data.post_id,
-            videoUrl: `https://www.tiktok.com/post/${result.data.post_id}`,
-          });
-
-          showNotification("视频已成功上传到 TikTok", "success");
-        } else {
-          throw new Error(result.error || "TikTok上传失败");
-        }
-      } else {
-        // Handle YouTube upload (existing logic)
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
-
-        const body = JSON.stringify({
-          ...metadata,
-          videoId: selectedVideo.id,
-        });
-
-        const response = await fetch(`/api/${platform}/upload`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: body,
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "上传失败");
-        }
-
-        // Simulate upload progress with more realistic increments
-        const progressSteps = [10, 25, 45, 60, 75, 85, 95, 100];
-        for (const progress of progressSteps) {
-          await new Promise((resolve) => setTimeout(resolve, 300));
-          updateUpload(uploadId, { progress });
-        }
-
-        const result = await response.json();
-        updateUpload(uploadId, {
-          status: "completed",
-          progress: 100,
-          completedAt: new Date(),
-          videoId: result.videoId || "mock-video-id",
-          videoUrl:
-            result.videoUrl || `https://${platform}.com/watch?v=mock-video-id`,
-        });
-
-        showNotification(
-          `视频已成功上传到 ${platform === "youtube" ? "YouTube" : "TikTok"}`,
-          "success"
-        );
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "上传失败";
-      updateUpload(uploadId, {
-        status: "failed",
-        error: errorMessage,
-      });
-      showNotification(errorMessage, "error");
-    } finally {
-      setIsUploading(false);
-    }
+    await uploadToPlatform(platform, selectedVideo, metadata);
   };
 
   const handleCancelUpload = (uploadId: string) => {

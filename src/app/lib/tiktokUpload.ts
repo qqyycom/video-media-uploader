@@ -1,186 +1,161 @@
-import { TikTokUploadData, UploadMetadata } from "../types";
+import { VideoFile, UploadMetadata } from "../types";
 
-export interface TikTokUploadResult {
+interface TikTokUploadConfig {
+  accessToken: string;
+  videoFile: VideoFile;
+  metadata: UploadMetadata;
+  onProgress?: (progress: number) => void;
+  onChunkUploaded?: (uploadedBytes: number) => void;
+}
+
+interface TikTokUploadResult {
   success: boolean;
-  data?: {
-    post_id: string;
-  };
+  videoId?: string;
+  publishId?: string;
   error?: string;
 }
 
-export class TikTokUploader {
-  private publishId: string;
-  private uploadUrl: string;
-  private chunkSize: number;
-  private totalChunks: number;
-
-  constructor(uploadData: TikTokUploadData) {
-    this.publishId = uploadData.publish_id;
-    this.uploadUrl = uploadData.upload_url;
-    this.chunkSize = uploadData.chunk_size;
-    this.totalChunks = uploadData.total_chunk_count;
-  }
-
-  async uploadVideo(
-    videoFile: File,
-    onProgress?: (progress: number) => void
-  ): Promise<TikTokUploadResult> {
-    try {
-      console.log("Starting TikTok upload with:", {
-        publishId: this.publishId,
-        totalChunks: this.totalChunks,
-        chunkSize: this.chunkSize,
-        fileSize: videoFile.size,
-      });
-
-      console.log(videoFile.size);
-
-      // Upload video in chunks
-      for (let chunkIndex = 0; chunkIndex < this.totalChunks; chunkIndex++) {
-        const start = chunkIndex * this.chunkSize;
-        let end = Math.min(start + this.chunkSize, videoFile.size);
-
-        if (chunkIndex === this.totalChunks - 1) {
-          end = videoFile.size;
-        }
-
-        const chunk = videoFile.slice(start, end, "video/mp4");
-        const actualChunkSize = end - start;
-
-        console.log(`Uploading chunk ${chunkIndex + 1}/${this.totalChunks}`, {
-          start,
-          end: end - 1,
-          size: actualChunkSize,
-        });
-
-        const chunkResponse = await fetch("/api/tiktok/upload-chunk", {
-          method: "POST",
-          body: chunk,
-          headers: {
-            upload_url: this.uploadUrl,
-            chunk_index: chunkIndex.toString(),
-            total_chunks: this.totalChunks.toString(),
-            chunk_size: this.chunkSize.toString(), // 使用总的chunkSize而不是actualChunkSize
-            total_size: videoFile.size.toString(),
-          },
-        });
-
-        console.log(chunkResponse);
-
-        if (!chunkResponse.ok) {
-          const errorData = await chunkResponse.json();
-          console.error("Chunk upload error:", errorData);
-          throw new Error(errorData.error || "Failed to upload video chunk");
-        }
-
-        // Update progress
-        if (onProgress) {
-          const progress = ((chunkIndex + 1) / this.totalChunks) * 100;
-          onProgress(progress);
-        }
-      }
-
-      console.log("All chunks uploaded, publishing video...");
-
-      // // Publish the video after all chunks are uploaded
-      // const publishResponse = await fetch("/api/tiktok/publish", {
-      //   method: "POST",
-      //   headers: {
-      //     "Content-Type": "application/json",
-      //   },
-      //   body: JSON.stringify({
-      //     publishId: this.publishId,
-      //   }),
-      // });
-
-      // if (!publishResponse.ok) {
-      //   const errorData = await publishResponse.json();
-      //   console.error("Publish error:", errorData);
-      //   throw new Error(errorData.error || "Failed to publish video");
-      // }
-
-      // const publishData = await publishResponse.json();
-      // console.log("Video published successfully:", publishData);
-      return {
-        success: true,
-        data: {
-          post_id: "123",
-        },
-        // data: publishData.data,
-      };
-    } catch (error) {
-      console.error("TikTok upload error:", error);
-      return {
-        success: false,
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
-      };
-    }
-  }
-}
-
-export async function initializeTikTokUpload(
-  videoFile: File,
-  metadata: UploadMetadata
-): Promise<{ success: boolean; data?: TikTokUploadData; error?: string }> {
+export async function uploadToTikTok({
+  videoFile,
+  metadata,
+  onProgress,
+  onChunkUploaded,
+}: TikTokUploadConfig): Promise<TikTokUploadResult> {
   try {
-    const response = await fetch("/api/tiktok/upload", {
+    // Step 1: Initialize upload via backend to protect client secret
+    const initResponse = await fetch("/api/tiktok/upload", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        videoFile: {
-          size: videoFile.size,
-          name: videoFile.name,
-          type: videoFile.type,
-        },
         title: metadata.title,
         description: metadata.description,
         privacy: metadata.privacy,
-        disableComment: metadata.disableComment,
-        disableDuet: metadata.disableDuet,
-        disableStitch: metadata.disableStitch,
+        disableComment: false,
+        disableDuet: false,
+        disableStitch: false,
+        videoFile: {
+          size: videoFile.file.size,
+          name: videoFile.file.name,
+          type: videoFile.file.type,
+        },
       }),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      return {
-        success: false,
-        error: errorData.error || "Failed to initialize upload",
-      };
+    if (!initResponse.ok) {
+      const errorData = await initResponse.json();
+      throw new Error(
+        `Failed to initialize TikTok upload: ${
+          errorData.error || "Unknown error"
+        }`
+      );
     }
 
-    const responseData = await response.json();
+    const initData = await initResponse.json();
+    if (!initData.success) {
+      throw new Error(initData.error || "Failed to initialize upload");
+    }
+
+    const { publish_id, upload_url, chunk_size, total_chunk_count } =
+      initData.data;
+
+    // Step 2: Upload video file directly to TikTok in chunks
+    let uploadedBytes = 0;
+
+    for (let i = 0; i < total_chunk_count; i++) {
+      const start = i * chunk_size;
+      let end = Math.min(start + chunk_size, videoFile.file.size);
+      if (i === total_chunk_count - 1) {
+        end = videoFile.file.size;
+      }
+      const chunk = videoFile.file.slice(start, end);
+
+      const response = await fetch(upload_url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": videoFile.file.type,
+          "Content-Length": chunk.size.toString(),
+          "Content-Range": `bytes ${start}-${end - 1}/${videoFile.file.size}`,
+        },
+        body: chunk,
+      });
+
+      if (response.ok) {
+        uploadedBytes = end;
+        onProgress?.((uploadedBytes / videoFile.file.size) * 100);
+        onChunkUploaded?.(uploadedBytes);
+      } else {
+        throw new Error(
+          `Chunk upload failed: ${response.status} ${response.statusText}`
+        );
+      }
+    }
+
+    // Step 3: Wait for processing completion via backend
+    const publishStatus = await checkPublishStatus(publish_id);
+    if (!publishStatus.success) {
+      throw new Error(publishStatus.error || "Upload processing failed");
+    }
+
     return {
       success: true,
-      data: responseData.data,
+      videoId: publishStatus.videoId,
+      publishId: publish_id,
     };
   } catch (error) {
+    console.error("TikTok upload error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Network error occurred",
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 }
 
-export async function uploadVideoToTikTok(
-  videoFile: File,
-  metadata: UploadMetadata,
-  onProgress?: (progress: number) => void
-): Promise<TikTokUploadResult> {
-  // Step 1: Initialize upload
-  const initResult = await initializeTikTokUpload(videoFile, metadata);
+async function checkPublishStatus(
+  publishId: string
+): Promise<{ success: boolean; videoId?: string; error?: string }> {
+  const maxAttempts = 60; // 2 minutes max
+  let attempts = 0;
 
-  if (!initResult.success || !initResult.data) {
-    return {
-      success: false,
-      error: initResult.error || "Failed to initialize upload",
-    };
+  while (attempts < maxAttempts) {
+    const statusResponse = await fetch("/api/tiktok/upload-status", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        publishId,
+      }),
+    });
+
+    if (!statusResponse.ok) {
+      return { success: false, error: "Failed to check upload status" };
+    }
+
+    const statusData = await statusResponse.json();
+
+    if (statusData.status === "PUBLISH_COMPLETE") {
+      return { success: true, videoId: statusData.videoId };
+    } else if (statusData.status === "PUBLISH_FAILED") {
+      return { success: false, error: "Video processing failed on TikTok" };
+    } else {
+      // Still processing, wait and check again
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      attempts++;
+    }
   }
 
-  // Step 2: Upload video using the uploader class
-  const uploader = new TikTokUploader(initResult.data);
-  return await uploader.uploadVideo(videoFile, onProgress);
+  return { success: false, error: "Upload processing timeout" };
+}
+
+// Backward compatibility functions - deprecated
+export async function uploadVideoToTikTok(): Promise<{
+  success: boolean;
+  data?: { post_id: string };
+  error?: string;
+}> {
+  throw new Error(
+    "Direct upload method deprecated. Use uploadToTikTok instead."
+  );
 }
