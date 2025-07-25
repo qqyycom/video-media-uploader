@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Convert File to Buffer
     const bytes = await videoFile.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const chunk = buffer.slice(start, end);
+    const chunk = buffer.subarray(start, end);
 
     // Upload chunk to YouTube
     const response = await fetch(uploadUrl, {
