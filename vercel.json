@@ -4,12 +4,5 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["hkg1"],
-  "env": {
-    "NEXT_PUBLIC_YOUTUBE_CLIENT_ID": "",
-    "YOUTUBE_CLIENT_SECRET": "",
-    "NEXT_PUBLIC_TIKTOK_CLIENT_KEY": "",
-    "TIKTOK_CLIENT_SECRET": "",
-    "NEXT_PUBLIC_APP_URL": ""
-  }
+  "regions": ["hkg1"]
 }
