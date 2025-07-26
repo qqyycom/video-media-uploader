@@ -9,6 +9,14 @@ export function useTokenRefresh() {
   const { youtubeAccount, tiktokAccount, refreshToken, refreshAccountData } =
     useAuth();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshFailureCounts = useRef<{ youtube: number; tiktok: number }>({
+    youtube: 0,
+    tiktok: 0,
+  });
+  const lastFailedRefresh = useRef<{ youtube: number; tiktok: number }>({
+    youtube: 0,
+    tiktok: 0,
+  });
 
   const checkTokenExpiry = (
     account: YouTubeAccount | TikTokAccount | null,
@@ -36,30 +44,69 @@ export function useTokenRefresh() {
     try {
       console.log("🔍 Performing token check...");
       let refreshed = false;
+      const now = Date.now();
 
       // Check YouTube token
       if (youtubeAccount && checkTokenExpiry(youtubeAccount, "youtube")) {
-        console.log("🔄 YouTube token needs refresh, refreshing...");
-        try {
-          await refreshToken("youtube");
-          console.log("✅ YouTube token refreshed successfully");
-          refreshed = true;
-        } catch (error) {
-          console.error("❌ Failed to refresh YouTube token:", error);
-          // 不再重试，避免无限循环
+        const lastFail = lastFailedRefresh.current.youtube;
+        const failureCount = refreshFailureCounts.current.youtube;
+        
+        // Implement exponential backoff: 1min, 2min, 4min, 8min, 16min, 32min, then stop
+        const backoffDelay = Math.pow(2, Math.min(failureCount, 5)) * 60 * 1000;
+        const shouldAttemptRefresh = now - lastFail >= backoffDelay;
+
+        if (failureCount >= 5 && shouldAttemptRefresh) {
+          console.log("🚫 YouTube token refresh max failures reached, skipping");
+          return;
+        }
+
+        if (shouldAttemptRefresh) {
+          console.log("🔄 YouTube token needs refresh, refreshing...");
+          try {
+            await refreshToken("youtube");
+            console.log("✅ YouTube token refreshed successfully");
+            refreshFailureCounts.current.youtube = 0; // Reset on success
+            lastFailedRefresh.current.youtube = 0;
+            refreshed = true;
+          } catch (error) {
+            console.error("❌ Failed to refresh YouTube token:", error);
+            refreshFailureCounts.current.youtube++;
+            lastFailedRefresh.current.youtube = now;
+          }
+        } else {
+          console.log(`⏸️ YouTube refresh skipped due to backoff (${Math.round((backoffDelay - (now - lastFail)) / 1000)}s remaining)`);
         }
       }
 
       // Check TikTok token
       if (tiktokAccount && checkTokenExpiry(tiktokAccount, "tiktok")) {
-        console.log("🔄 TikTok token needs refresh, refreshing...");
-        try {
-          await refreshToken("tiktok");
-          console.log("✅ TikTok token refreshed successfully");
-          refreshed = true;
-        } catch (error) {
-          console.error("❌ Failed to refresh TikTok token:", error);
-          // 不再重试，避免无限循环
+        const lastFail = lastFailedRefresh.current.tiktok;
+        const failureCount = refreshFailureCounts.current.tiktok;
+        
+        // Implement exponential backoff: 1min, 2min, 4min, 8min, 16min, 32min, then stop
+        const backoffDelay = Math.pow(2, Math.min(failureCount, 5)) * 60 * 1000;
+        const shouldAttemptRefresh = now - lastFail >= backoffDelay;
+
+        if (failureCount >= 5 && shouldAttemptRefresh) {
+          console.log("🚫 TikTok token refresh max failures reached, skipping");
+          return;
+        }
+
+        if (shouldAttemptRefresh) {
+          console.log("🔄 TikTok token needs refresh, refreshing...");
+          try {
+            await refreshToken("tiktok");
+            console.log("✅ TikTok token refreshed successfully");
+            refreshFailureCounts.current.tiktok = 0; // Reset on success
+            lastFailedRefresh.current.tiktok = 0;
+            refreshed = true;
+          } catch (error) {
+            console.error("❌ Failed to refresh TikTok token:", error);
+            refreshFailureCounts.current.tiktok++;
+            lastFailedRefresh.current.tiktok = now;
+          }
+        } else {
+          console.log(`⏸️ TikTok refresh skipped due to backoff (${Math.round((backoffDelay - (now - lastFail)) / 1000)}s remaining)`);
         }
       }
 
@@ -75,6 +122,10 @@ export function useTokenRefresh() {
   // Single effect to manage the monitoring lifecycle
   useEffect(() => {
     const hasAccounts = Boolean(youtubeAccount || tiktokAccount);
+
+    // Reset failure counters when accounts change
+    refreshFailureCounts.current = { youtube: 0, tiktok: 0 };
+    lastFailedRefresh.current = { youtube: 0, tiktok: 0 };
 
     // Clear any existing interval
     if (intervalRef.current) {
