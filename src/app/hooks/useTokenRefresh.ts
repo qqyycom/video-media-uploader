@@ -17,6 +17,8 @@ export function useTokenRefresh() {
     youtube: 0,
     tiktok: 0,
   });
+  const prevYoutubeId = useRef<string | undefined>();
+  const prevTiktokId = useRef<string | undefined>();
 
   const checkTokenExpiry = (
     account: YouTubeAccount | TikTokAccount | null,
@@ -41,10 +43,13 @@ export function useTokenRefresh() {
   };
 
   const performTokenCheck = useCallback(async () => {
-    try {
-      console.log("🔍 Performing token check...");
-      let refreshed = false;
-      const now = Date.now();
+    console.log("🔍 Performing token check...");
+    console.log("Current failures:", {
+      youtube: refreshFailureCounts.current.youtube,
+      tiktok: refreshFailureCounts.current.tiktok
+    });
+    let refreshed = false;
+    const now = Date.now();
 
       // Check YouTube token
       if (youtubeAccount && checkTokenExpiry(youtubeAccount, "youtube")) {
@@ -55,7 +60,7 @@ export function useTokenRefresh() {
         const backoffDelay = Math.pow(2, Math.min(failureCount, 5)) * 60 * 1000;
         const shouldAttemptRefresh = now - lastFail >= backoffDelay;
 
-        if (failureCount >= 5 && shouldAttemptRefresh) {
+        if (failureCount >= 5 && lastFail > 0) {
           console.log(
             "🚫 YouTube token refresh max failures reached, skipping"
           );
@@ -93,7 +98,7 @@ export function useTokenRefresh() {
         const backoffDelay = Math.pow(2, Math.min(failureCount, 5)) * 60 * 1000;
         const shouldAttemptRefresh = now - lastFail >= backoffDelay;
 
-        if (failureCount >= 5 && shouldAttemptRefresh) {
+        if (failureCount >= 5 && lastFail > 0) {
           console.log("🚫 TikTok token refresh max failures reached, skipping");
           return;
         }
@@ -120,22 +125,29 @@ export function useTokenRefresh() {
         }
       }
 
-      // Only refresh account data if we actually refreshed a token
-      if (refreshed) {
-        await refreshAccountData();
-      }
-    } catch (error) {
-      console.error("Token check failed:", error);
+    // Only refresh account data if we actually refreshed a token
+    if (refreshed) {
+      await refreshAccountData().catch(error => {
+        console.error("Failed to refresh account data:", error);
+      });
     }
-  }, [youtubeAccount, tiktokAccount, refreshToken, refreshAccountData]);
+  }, [youtubeAccount?.id, tiktokAccount?.id, refreshToken, refreshAccountData]);
 
   // Single effect to manage the monitoring lifecycle
   useEffect(() => {
     const hasAccounts = Boolean(youtubeAccount || tiktokAccount);
 
-    // Reset failure counters when accounts change
-    refreshFailureCounts.current = { youtube: 0, tiktok: 0 };
-    lastFailedRefresh.current = { youtube: 0, tiktok: 0 };
+    // Reset failure counters when accounts actually change
+    if (youtubeAccount?.id !== prevYoutubeId.current) {
+      refreshFailureCounts.current.youtube = 0;
+      lastFailedRefresh.current.youtube = 0;
+      prevYoutubeId.current = youtubeAccount?.id;
+    }
+    if (tiktokAccount?.id !== prevTiktokId.current) {
+      refreshFailureCounts.current.tiktok = 0;
+      lastFailedRefresh.current.tiktok = 0;
+      prevTiktokId.current = tiktokAccount?.id;
+    }
 
     // Clear any existing interval
     if (intervalRef.current) {

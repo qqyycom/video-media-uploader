@@ -1,4 +1,4 @@
-import { YouTubeAccount, TikTokAccount } from '../types';
+import { YouTubeAccount, TikTokAccount } from "../types";
 
 export interface TokenRefreshResult {
   success: boolean;
@@ -16,10 +16,10 @@ export const refreshYouTubeToken = async (
   refreshToken: string
 ): Promise<TokenRefreshResult> => {
   try {
-    const response = await fetch('/api/youtube/refresh', {
-      method: 'POST',
+    const response = await fetch("/api/youtube/refresh", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ refreshToken }),
     });
@@ -28,7 +28,7 @@ export const refreshYouTubeToken = async (
       const errorData = await response.json();
       return {
         success: false,
-        error: errorData.error || 'Failed to refresh YouTube token',
+        error: errorData.error || "Failed to refresh YouTube token",
       };
     }
 
@@ -40,9 +40,10 @@ export const refreshYouTubeToken = async (
       expiresAt: data.expiresAt,
     };
   } catch (error) {
+    console.error("Failed to refresh YouTube token:", error);
     return {
       success: false,
-      error: 'Network error during YouTube token refresh',
+      error: "Network error during YouTube token refresh",
     };
   }
 };
@@ -51,10 +52,10 @@ export const refreshTikTokToken = async (
   refreshToken: string
 ): Promise<TokenRefreshResult> => {
   try {
-    const response = await fetch('/api/tiktok/refresh', {
-      method: 'POST',
+    const response = await fetch("/api/tiktok/refresh", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ refreshToken }),
     });
@@ -63,7 +64,7 @@ export const refreshTikTokToken = async (
       const errorData = await response.json();
       return {
         success: false,
-        error: errorData.error || 'Failed to refresh TikTok token',
+        error: errorData.error || "Failed to refresh TikTok token",
       };
     }
 
@@ -75,9 +76,10 @@ export const refreshTikTokToken = async (
       expiresAt: data.expiresAt,
     };
   } catch (error) {
+    console.error("Failed to refresh TikTok token:", error);
     return {
       success: false,
-      error: 'Network error during TikTok token refresh',
+      error: "Network error during TikTok token refresh",
     };
   }
 };
@@ -103,11 +105,11 @@ export const ensureValidYouTubeToken = async (
       expiresAt: result.expiresAt || account.expiresAt,
     };
     updateAccount(updatedAccount);
-    updateAccountInStorage('youtube', updatedAccount);
+    updateAccountInStorage("youtube", updatedAccount);
     return result.accessToken;
   }
 
-  console.error('Failed to refresh YouTube token:', result.error);
+  console.error("Failed to refresh YouTube token:", result.error);
   return null;
 };
 
@@ -132,21 +134,26 @@ export const ensureValidTikTokToken = async (
       expiresAt: result.expiresAt || account.expiresAt,
     };
     updateAccount(updatedAccount);
-    updateAccountInStorage('tiktok', updatedAccount);
+    updateAccountInStorage("tiktok", updatedAccount);
     return result.accessToken;
   }
 
-  console.error('Failed to refresh TikTok token:', result.error);
+  console.error("Failed to refresh TikTok token:", result.error);
   return null;
 };
 
 const updateAccountInStorage = (
-  platform: 'youtube' | 'tiktok',
+  platform: "youtube" | "tiktok",
   account: YouTubeAccount | TikTokAccount
 ): void => {
   try {
-    const cookieName = platform === 'youtube' ? 'youtube_account' : 'tiktok_account';
-    document.cookie = `${cookieName}=${JSON.stringify(account)}; path=/; max-age=${60 * 60 * 24 * 7}; secure=${process.env.NODE_ENV === 'production'}; samesite=lax`;
+    const cookieName =
+      platform === "youtube" ? "youtube_account" : "tiktok_account";
+    document.cookie = `${cookieName}=${JSON.stringify(
+      account
+    )}; path=/; max-age=${60 * 60 * 24 * 7}; secure=${
+      process.env.NODE_ENV === "production"
+    }; samesite=lax`;
   } catch (error) {
     console.error(`Failed to update ${platform} account in storage:`, error);
   }
@@ -155,13 +162,13 @@ const updateAccountInStorage = (
 export const makeAuthenticatedRequest = async (
   url: string,
   options: RequestInit,
-  platform: 'youtube' | 'tiktok',
+  platform: "youtube" | "tiktok",
   account: YouTubeAccount | TikTokAccount,
   updateAccount: (account: YouTubeAccount | TikTokAccount) => void
 ): Promise<Response> => {
   let accessToken: string | null;
 
-  if (platform === 'youtube') {
+  if (platform === "youtube") {
     accessToken = await ensureValidYouTubeToken(
       account as YouTubeAccount,
       updateAccount as (account: YouTubeAccount) => void
