@@ -1,3 +1,8 @@
+/**
+ * 视频上传组件
+ * 提供视频文件拖拽上传、元数据编辑和平台选择功能
+ */
+
 'use client'
 
 import React, { useCallback, useState } from 'react'
@@ -12,11 +17,17 @@ import { Select } from '@/app/components/common/Select'
 import { TagInput } from '@/app/components/common/TagInput'
 
 interface VideoUploadProps {
+  /** 视频选择回调 */
   onVideoSelect: (video: VideoFile | undefined) => void
+  /** 元数据变更回调 */
   onMetadataChange: (metadata: UploadMetadata) => void
+  /** 上传开始回调 */
   onUpload: (platform: 'youtube' | 'tiktok') => void
+  /** 当前选择的视频 */
   selectedVideo?: VideoFile
+  /** 当前元数据 */
   metadata?: UploadMetadata
+  /** 是否正在上传 */
   isUploading?: boolean
 }
 

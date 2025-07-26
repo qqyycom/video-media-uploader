@@ -1,3 +1,8 @@
+/**
+ * 直接上传Hook
+ * 管理视频上传到YouTube和TikTok的完整流程，包括进度跟踪和错误处理
+ */
+
 import { useCallback, useState } from "react";
 import { VideoFile, UploadMetadata, UploadProgress } from "@/app/types";
 import { uploadToYouTube } from "@/app/lib/youtubeUpload";
@@ -5,20 +10,28 @@ import { uploadToTikTok } from "@/app/lib/tiktokUpload";
 import { generateId } from "@/app/lib/utils";
 
 interface UseDirectUploadProps {
+  /** YouTube访问令牌 */
   youtubeAccessToken?: string;
+  /** TikTok访问令牌 */
   tiktokAccessToken?: string;
 }
 
 interface UseDirectUploadReturn {
+  /** 当前所有上传任务 */
   uploads: UploadProgress[];
+  /** 是否有正在进行的的上传 */
   isUploading: boolean;
+  /** 开始上传到指定平台 */
   uploadToPlatform: (
     platform: "youtube" | "tiktok",
     videoFile: VideoFile,
     metadata: UploadMetadata
   ) => Promise<void>;
+  /** 取消指定上传 */
   cancelUpload: (uploadId: string) => void;
+  /** 重试失败的上传 */
   retryUpload: (uploadId: string) => void;
+  /** 清除所有上传记录 */
   clearUploads: () => void;
 }
 
