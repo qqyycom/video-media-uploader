@@ -50,13 +50,15 @@ export function useTokenRefresh() {
       if (youtubeAccount && checkTokenExpiry(youtubeAccount, "youtube")) {
         const lastFail = lastFailedRefresh.current.youtube;
         const failureCount = refreshFailureCounts.current.youtube;
-        
+
         // Implement exponential backoff: 1min, 2min, 4min, 8min, 16min, 32min, then stop
         const backoffDelay = Math.pow(2, Math.min(failureCount, 5)) * 60 * 1000;
         const shouldAttemptRefresh = now - lastFail >= backoffDelay;
 
         if (failureCount >= 5 && shouldAttemptRefresh) {
-          console.log("🚫 YouTube token refresh max failures reached, skipping");
+          console.log(
+            "🚫 YouTube token refresh max failures reached, skipping"
+          );
           return;
         }
 
@@ -74,7 +76,11 @@ export function useTokenRefresh() {
             lastFailedRefresh.current.youtube = now;
           }
         } else {
-          console.log(`⏸️ YouTube refresh skipped due to backoff (${Math.round((backoffDelay - (now - lastFail)) / 1000)}s remaining)`);
+          console.log(
+            `⏸️ YouTube refresh skipped due to backoff (${Math.round(
+              (backoffDelay - (now - lastFail)) / 1000
+            )}s remaining)`
+          );
         }
       }
 
@@ -82,7 +88,7 @@ export function useTokenRefresh() {
       if (tiktokAccount && checkTokenExpiry(tiktokAccount, "tiktok")) {
         const lastFail = lastFailedRefresh.current.tiktok;
         const failureCount = refreshFailureCounts.current.tiktok;
-        
+
         // Implement exponential backoff: 1min, 2min, 4min, 8min, 16min, 32min, then stop
         const backoffDelay = Math.pow(2, Math.min(failureCount, 5)) * 60 * 1000;
         const shouldAttemptRefresh = now - lastFail >= backoffDelay;
@@ -106,7 +112,11 @@ export function useTokenRefresh() {
             lastFailedRefresh.current.tiktok = now;
           }
         } else {
-          console.log(`⏸️ TikTok refresh skipped due to backoff (${Math.round((backoffDelay - (now - lastFail)) / 1000)}s remaining)`);
+          console.log(
+            `⏸️ TikTok refresh skipped due to backoff (${Math.round(
+              (backoffDelay - (now - lastFail)) / 1000
+            )}s remaining)`
+          );
         }
       }
 
