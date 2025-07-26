@@ -12,76 +12,148 @@ export const isTokenExpired = (expiresAt: number): boolean => {
   return Date.now() >= expiresAt - 60000; // Refresh 1 minute before expiry
 };
 
+/**
+ * 带有指数退避和重试限制的token刷新函数
+ * @param refreshToken 刷新令牌
+ * @param maxRetries 最大重试次数，默认为5
+ * @param baseDelay 基础延迟时间（毫秒），默认为1000
+ */
 export const refreshYouTubeToken = async (
-  refreshToken: string
+  refreshToken: string,
+  maxRetries = 5,
+  baseDelay = 1000
 ): Promise<TokenRefreshResult> => {
-  try {
-    const response = await fetch('/api/youtube/refresh', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ refreshToken }),
-    });
+  let lastError: string = '';
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('/api/youtube/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
 
-    if (!response.ok) {
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: true,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          expiresAt: data.expiresAt,
+        };
+      }
+
       const errorData = await response.json();
-      return {
-        success: false,
-        error: errorData.error || 'Failed to refresh YouTube token',
-      };
+      lastError = errorData.error || 'Failed to refresh YouTube token';
+      
+      // 如果是最后一次尝试，直接返回错误
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      // 计算指数退避延迟: baseDelay * 2^attempt + 随机数(防止雷群)
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+      console.log(`YouTube token refresh attempt ${attempt + 1} failed, retrying in ${Math.round(delay)}ms...`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+    } catch (error) {
+      lastError = 'Network error during YouTube token refresh';
+      
+      // 如果是最后一次尝试或网络错误，停止重试
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+      console.log(`YouTube token refresh network error attempt ${attempt + 1}, retrying in ${Math.round(delay)}ms...`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
-
-    const data = await response.json();
-    return {
-      success: true,
-      accessToken: data.accessToken,
-      refreshToken: data.refreshToken,
-      expiresAt: data.expiresAt,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: 'Network error during YouTube token refresh',
-    };
   }
+  
+  return {
+    success: false,
+    error: lastError,
+  };
 };
 
+/**
+ * 带有指数退避和重试限制的TikTok token刷新函数
+ * @param refreshToken 刷新令牌
+ * @param maxRetries 最大重试次数，默认为5
+ * @param baseDelay 基础延迟时间（毫秒），默认为1000
+ */
 export const refreshTikTokToken = async (
-  refreshToken: string
+  refreshToken: string,
+  maxRetries = 5,
+  baseDelay = 1000
 ): Promise<TokenRefreshResult> => {
-  try {
-    const response = await fetch('/api/tiktok/refresh', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ refreshToken }),
-    });
+  let lastError: string = '';
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('/api/tiktok/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
 
-    if (!response.ok) {
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: true,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          expiresAt: data.expiresAt,
+        };
+      }
+
       const errorData = await response.json();
-      return {
-        success: false,
-        error: errorData.error || 'Failed to refresh TikTok token',
-      };
+      lastError = errorData.error || 'Failed to refresh TikTok token';
+      
+      // 如果是最后一次尝试，直接返回错误
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      // 计算指数退避延迟
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+      console.log(`TikTok token refresh attempt ${attempt + 1} failed, retrying in ${Math.round(delay)}ms...`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+    } catch (error) {
+      lastError = 'Network error during TikTok token refresh';
+      
+      // 如果是最后一次尝试，停止重试
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+      console.log(`TikTok token refresh network error attempt ${attempt + 1}, retrying in ${Math.round(delay)}ms...`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
-
-    const data = await response.json();
-    return {
-      success: true,
-      accessToken: data.accessToken,
-      refreshToken: data.refreshToken,
-      expiresAt: data.expiresAt,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: 'Network error during TikTok token refresh',
-    };
   }
+  
+  return {
+    success: false,
+    error: lastError,
+  };
 };
 
+/**
+ * 确保YouTube令牌有效，带指数退避重试
+ * @param account YouTube账户信息
+ * @param updateAccount 更新账户信息的回调函数
+ * @returns 有效令牌或null
+ */
 export const ensureValidYouTubeToken = async (
   account: YouTubeAccount,
   updateAccount: (account: YouTubeAccount) => void
@@ -111,6 +183,12 @@ export const ensureValidYouTubeToken = async (
   return null;
 };
 
+/**
+ * 确保TikTok令牌有效，带指数退避重试
+ * @param account TikTok账户信息
+ * @param updateAccount 更新账户信息的回调函数
+ * @returns 有效令牌或null
+ */
 export const ensureValidTikTokToken = async (
   account: TikTokAccount,
   updateAccount: (account: TikTokAccount) => void
@@ -138,6 +216,42 @@ export const ensureValidTikTokToken = async (
 
   console.error('Failed to refresh TikTok token:', result.error);
   return null;
+};
+
+/**
+ * 指数退避重试工具函数
+ * @param operation 需要重试的异步操作
+ * @param maxRetries 最大重试次数
+ * @param baseDelay 基础延迟时间（毫秒）
+ * @returns 操作结果
+ */
+export const retryWithExponentialBackoff = async <T>(
+  operation: () => Promise<T>,
+  maxRetries = 5,
+  baseDelay = 1000
+): Promise<T> => {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // 如果是最后一次尝试，抛出错误
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      // 计算指数退避延迟
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+      console.log(`Operation attempt ${attempt + 1} failed, retrying in ${Math.round(delay)}ms...`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError || new Error('Operation failed after maximum retries');
 };
 
 const updateAccountInStorage = (

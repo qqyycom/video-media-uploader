@@ -46,6 +46,7 @@ export function useTokenRefresh() {
           refreshed = true;
         } catch (error) {
           console.error("❌ Failed to refresh YouTube token:", error);
+          // 不再重试，避免无限循环
         }
       }
 
@@ -58,6 +59,7 @@ export function useTokenRefresh() {
           refreshed = true;
         } catch (error) {
           console.error("❌ Failed to refresh TikTok token:", error);
+          // 不再重试，避免无限循环
         }
       }
 
